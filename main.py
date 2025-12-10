@@ -1,66 +1,75 @@
-import os
-import requests
+import feedparser
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from bs4 import BeautifulSoup
+import html
 
 app = Flask(__name__)
+CORS(app)
 
-# enable CORS
-CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route("/")
 def home():
     return jsonify({
-        'message': 'Medium Feed API',
-        'endpoint': '/api/feed'
+        "message": "Medium RSS API",
+        "endpoint": "/api/feed"
     })
+
 
 @app.route("/api/feed")
 def get_feed():
     try:
-        limit = request.args.get('limit', type=int)
+        limit = request.args.get("limit", type=int)
 
-        FEED_URL = os.getenv(
-            "FEED_URL",
-            "https://rssjson.com/api/v1/convert/https%3A%2F%2Fmedium.com%2Ffeed%2F%40wayanardike"
-        )
+        FEED_URL = "https://medium.com/feed/@wayanardike"
 
-        response = requests.get(FEED_URL, timeout=10)
-        data = response.json()
+        feed = feedparser.parse(FEED_URL)
 
-        items = data.get('items', [])
+        entries = feed.entries or []
         if limit:
-            items = items[:limit]
+            entries = entries[:limit]
 
-        results = []
-        for item in items:
-            soup = BeautifulSoup(item.get('description', ''), 'html.parser')
-            h4 = soup.find('h4')
-            img = h4.find_next('img') if h4 else soup.find('img')
-            thumbnail = img.get('src') if img else ''
+        articles = []
 
-            results.append({
-                'title': item.get('title', ''),
-                'pubDate': item.get('pubDate', ''),
-                'link': item.get('link', ''),
-                'author': item.get('author', ''),
-                'thumbnail': thumbnail
+        for e in entries:
+            content = e.get("content", [{}])[0].get("value", "")
+            soup = BeautifulSoup(content, "html.parser")
+
+            img = soup.find("img")
+            thumbnail = img["src"] if img else ""
+
+            # clean title
+            raw_title = e.get("title", "")
+            title = html.unescape(raw_title).replace("\u00a0", " ")
+            title = " ".join(title.split())
+
+            # pick published date
+            pub_date = e.get("published", "")
+
+            articles.append({
+                "id": e.get("id"),
+                "title": title,
+                "link": e.get("link"),
+                "thumbnail": thumbnail,
+                "pubDate": pub_date,
             })
 
         return jsonify({
-            'success': True,
-            'total': len(results),
-            'articles': results
+            "success": True,
+            "total": len(articles),
+            "articles": articles
         })
 
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+    except Exception as err:
+        return jsonify({
+            "success": False,
+            "message": str(err)
+        }), 500
+
 
 if __name__ == "__main__":
-    debug = os.environ.get("FLASK_ENV") != "production"
     app.run(
-        debug=debug,
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 3000))
+        port=3000,
+        debug=True
     )
