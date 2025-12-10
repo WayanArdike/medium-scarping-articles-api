@@ -44,7 +44,9 @@ def get_feed():
             title = " ".join(title.split())
 
             # pick published date
-            pub_date = e.get("published", "")
+            pub_raw = e.get("published", "")
+            pub_parts = pub_raw.split()
+            pub_date = " ".join(pub_parts[:4])  # 👉 Wed, 10 Dec 2025
 
             articles.append({
                 "id": e.get("id"),
